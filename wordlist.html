@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html><head>
+    <script src="jquery-3.5.1.js"></script>
+    <script src="https://unpkg.com/realm-web@1.2.0/dist/bundle.iife.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <style>
+
+    </style>
+    <script src="loadbooks.js"></script>
+</head>
+<body>
+
+    <script>
+    /*
+wordlist page:
+1. Display all words, with delete button, delete all button, export button.
+2. Delete button: When clicked, send delete request via book id stored. Doesn't have to succeed. Push last-updated and update local books.
+3. Add button: When clicked, pop-up prompt w/ title and upload button. On clicking submit, send insert request, and get returned book id and update local books.
+4. Back button takes you to books page.*/
+    function showhideSentence(el) {
+        el.children[0].hidden = !el.children[0].hidden;
+    }
+    function writeVocabToSelector() {
+        $("#vocabselect").empty();
+        for(const vocab of window.vocab) {
+            $("#vocabselect").append(`<div><button onClick='delete_vocab("${vocab._id}", writeVocabToSelector)'>X</button>  <div onClick='showhideSentence(this)'>${vocab.vocab}<div hidden>${vocab.sentence}</div></div>`); 
+        }
+    }
+    main = async () => {
+    await get_colls();
+    await fetch_metadata();
+    if(window.metadata.schemaVersion !== 0) {
+        console.error("Schema version wrong, panic!");
+        return;
+    }
+    await fetch_vocab();
+    writeVocabToSelector();
+    }
+    $(document).ready(function() {
+    main();
+    });
+    </script>
+    <div id="vocabselect"></div><br><br>
+
+    <button id="export" onclick="exportVocab()">Export all vocab</button>
+    <button id="deleteAll" onclick="delete_all_vocab(writeVocabToSelector)">Delete all vocab</button>
+    <a href="index.html"><button>Back</button></a>
+
+
+    <div id="book"></div>
+    
+    <div id="popup-full">
+        <div id="popup-spacer"></div>
+        <div id="popup">
+            
+            
+        </div>
+    </div>
+    <style id="where-popup">
+        #popup-full {
+           bottom: 0px;
+       }
+   </style>
+    
+</body>
+</html>

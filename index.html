@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html><head>
+    <script src="jquery-3.5.1.js"></script>
+    <script src="https://unpkg.com/realm-web@1.2.0/dist/bundle.iife.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <style>
+        ruby > rt {
+            user-select: none;
+        }
+        rt {
+            user-select: none;
+        }
+        /* Old style
+        #lasttime {
+            position: fixed;
+            left: 0px;
+            top: 50px;
+            width : 50px;
+            text-align: center;
+            line-height: 25px;
+        }
+        #timer {
+            position: fixed;
+            width: 50px;
+            height: 25px;
+            line-height: 25px;
+            top: 0px;
+            left: 0px;
+            text-align: center;
+            background-color: #55EE55;
+        }
+        #bookselect {
+            position: fixed; 
+            top: 100px; 
+            left: 4px; 
+            width: 42px;
+        }
+        body {
+            margin-left: 50px;
+        }*/
+        #timer {
+            float: left;
+            width: 50px;
+            height: 25px;
+            line-height: 25px;
+            text-align: center;
+            background-color: #EE5555;
+        }       
+        #lasttime {
+            float: left;
+            position: relative;
+            left: 25px;
+            width: 50px;
+            height: 25px;
+            text-align: center;
+            line-height: 25px;
+        } 
+        #bookselect {
+            float: left;
+            position: relative;
+            overflow-y:auto;
+            top: 2px;
+            left: 50px;
+            height: 90%;
+        }
+        #popup-spacer {
+            width: 100%;
+            height: 25px;
+            background-color: #00000000;
+        }
+        #popup {
+            width: 100%;
+            height: 50vh;
+            float: left;
+            background-color: #aaaaaa;
+        }
+        #popup-full {
+            position: fixed;
+            width: 100%;
+            left: 0px;
+            transition: bottom 0.3s cubic-bezier(1, 0, 0, 1);
+        }
+        #manage {
+            position: absolute;
+            left: 50px;
+            bottom: 5px;
+        }
+        #popup-full:hover {
+            bottom: 0px;
+        }
+        #addButton {
+            position: fixed;
+            right: 30px;
+            top: 30px;
+            width: 65px;
+            height: 65px;
+            opacity: 0.3;
+            transition: opacity 0.5s cubic-bezier(1, 0, 0, 1);
+            user-select: none;
+        }
+
+        #addButton:hover {
+            opacity: 1;
+        }
+    </style>
+    <script src="loadbooks.js"></script>
+</head>
+<body>
+
+    <!-- <div>
+        <-- Login anonymously -->
+        <!-- <input type="submit" value="LOGIN" onClick="login()"> -->
+        <!-- Finds first 20 movies in movies collection -->
+        <!-- <input type="submit" value="FIND BOOKS" onClick="find_books()">
+
+        <input type="submit" value="ADD TESTER BOOK" onClick='add_book("abc", "123")'> -->
+        <!-- </div> -->
+
+    <!-- Using this div to display the user ID -->
+    <!-- <div id="user"></div> -->
+    <!-- Using this div to show the 20 book titles -->
+    <!-- <div id="books"></div>  -->
+    
+    <script>
+    /*Books page:
+1. Grab entire metadata, check schema-version = 0. If not exist, create.
+2. Check my localStorage last-updated vs metadata last-updated. If not equal, get book list from content and write last-updated and book list to localStorage (preserving any content entries in book list that were previously there).
+3. Get current-book, current-line specified by metadata, and load it if it exists, otherwise "No book loaded. Choose a book from dropdown." If book exists but line doesn't, set line to 0 and push.
+4. Every minute, check if current-line is different from metadata. If so, set metadata.current-line to current-line, and push metadata.
+Book dropdown:
+1. Have little arrow at bottom of screen. When bottom of screen is moused over, pop-up half-screen-length book list (scrollable). Pops back down when mouse goes to top half of screen.
+2. Upon selecting book from book list, save current-line to metadata if it differs. Then, save new current-book to metadata. If new current-book has current-line, load line, else write 0 to current-line for the book.
+3. When click on manage books, manage page.*/
+    function renderFailedToLoad(s) {
+        $('#book').innerHTML = s;
+    }
+    function maybePushUpdate() {
+        if(window.metadata.currentLines === undefined || window.metadata.currentLines[window.current_book] !== window.current_line) {
+            sync_current_line_to_db();
+        }
+    }
+    function makePopup() {
+        const popupBar = document.getElementById("popup-full");
+        const wherePopup = document.getElementById("where-popup");
+        wherePopup.innerHTML = "#popup-full {bottom: -50vh}";
+    }
+    function writeBooksToSelector() {
+        $("#bookselect").empty();
+        for(const [id, book] of Object.entries(window.localBookInfo)) {
+            $("#bookselect").append(`<div class="bookselectbook" onClick='goto_book("${id}")'>${book.title}</div>`); 
+        }
+    }
+
+    const quotes = ["「」", "『』", "''", '""', '()', '[]', '（）', '［］'];
+    const quoteForwardMap = quotes.reduce(function(map, s) {
+        map[s[0]] = s[1];
+        return map;
+    }, {});
+    const quoteBackMap = quotes.reduce(function(map, s) {
+        map[s[1]] = s[0];
+        return map;
+    }, {});
+    const enders = ".!?．。！？…︒︕︖︙"
+    function getTextFromNode(n) {
+        if(n === null) {
+            return "";
+        } else if (n.nodeType === Node.TEXT_NODE) {
+            return n.nodeValue;
+        } else if (n.nodeType === Node.ELEMENT_NODE) {
+            if(n.tagName == "RT") {
+                return "";
+            }
+            return Array.from(n.childNodes).reduce(function(st, n) {
+                return st + getTextFromNode(n);
+            }, "");
+        } else {
+            return "";
+        }
+    }
+    function getFullTextAndOff(sel) {
+        let cur = sel.anchorNode;
+        while(cur.parentNode.tagName !== "P") {
+            cur = cur.parentNode;
+        }
+        let prev = cur.previousSibling;
+        let additionalOff = 0;
+        while(prev != null) {
+            additionalOff += getTextFromNode(prev).length;
+            cur = prev;
+            prev = cur.previousSibling;
+        }
+        let text = "";
+        let next = cur;
+        while(next != null) {
+            text += getTextFromNode(next);
+            cur = next;
+            next = cur.nextSibling;
+        }
+        return [text, additionalOff + sel.anchorOffset];
+    }
+    function getSurroundingSentence(sel) {
+        const [fullText, offset] = getFullTextAndOff(sel);
+        const node = sel.anchorNode;
+        console.log(node);
+        console.log("full text: " + fullText);
+        let start = offset;
+        // Walk backwards
+        let quoteStack = [];
+        for(; start > 0; start -= 1) {
+            let c = fullText[start - 1];
+            if(c == '\n') break;
+            if(quoteStack.length === 0 && enders.includes(c)) {
+                break;
+            }
+            if(c in quoteBackMap) {
+                quoteStack.push(c);
+            }
+            else if(c in quoteForwardMap) {
+                if(quoteStack.length === 0) {
+                    break;
+                }
+                if(c === quoteBackMap[quoteStack[quoteStack.length - 1]]) {
+                    quoteStack.pop();
+                }
+            }
+        }
+        quoteStack = [];
+        // Walk forwards
+        let end = offset + sel.toString().length;
+        for(; end < fullText.length; end += 1) {
+            let c = fullText[end];
+            if(c == '\n') break;
+            if(quoteStack.length === 0 && enders.includes(c)) {
+                end += 1;
+                break;
+            }
+            if(c in quoteForwardMap) {
+                quoteStack.push(c);
+            }
+            else if(c in quoteBackMap) {
+                if(quoteStack.length === 0) {
+                    break;
+                }
+                if(c === quoteForwardMap[quoteStack[quoteStack.length - 1]]) {
+                    quoteStack.pop();
+                }
+            }
+        }
+        console.log("Sentence is: " + fullText.substring(start, end));
+        return fullText.substring(start, end);
+    }
+    function popupFailedToAdd() {
+        console.log("Failed to add");
+    }
+    function makeAddButton() {
+        $("#addButton").on("click", function(e) {
+            const sel = window.getSelection();
+            if(sel.isCollapsed || sel.toString().length === 0) {
+                popupFailedToAdd();
+                return;
+            } else {
+                const toAdd = sel.toString();
+                const sentence = getSurroundingSentence(sel);
+                add_vocab_to_save_list(toAdd, sentence);
+            }
+        })
+    }
+    main = async () => {
+    await get_colls();
+    await fetch_metadata();
+    if(window.metadata.schemaVersion !== 0) {
+        console.error("Schema version wrong, panic!");
+        return;
+    }
+    const localTS = localStorage.getItem("bookListLastUpdated");
+    window.localBookInfo = JSON.parse(localStorage.getItem("bookList"));
+    if(window.localBookInfo === null) {
+        window.localBookInfo = {};
+    }
+    if(localTS !== window.metadata.last_updated) {
+        console.log("Timestamp mismatch, fetching book list");
+        const newBookInfo = await get_books();
+        for (const [key, value] of Object.entries(newBookInfo)) {
+            if(!(key in window.localBookInfo)) {
+                window.localBookInfo[key] = value;
+            }
+        }
+        localStorage.setItem("bookList", JSON.stringify(window.localBookInfo));
+        localStorage.setItem("bookListLastUpdated", window.metadata.last_updated);
+        console.log("Fetched");
+    }
+    writeBooksToSelector();
+    window.current_book = window.metadata.currentBook;
+    if(window.current_book === null || window.current_book === undefined) {
+        if(Object.keys(window.localBookInfo).length === 0) {
+            renderFailedToLoad("Must add books!");
+            return;
+        }
+        window.current_book = Object.keys(window.localBookInfo)[0];
+    }
+    if(!(window.current_book in window.localBookInfo)) {
+        renderFailedToLoad("No book loaded. Choose a book from dropdown.");
+        return;
+    }
+    await load_current_book();
+    window.current_line = window.metadata.currentLines ? window.metadata.currentLines[window.current_book] : undefined;
+    if(window.current_line === undefined) {
+        window.current_line = 0;
+    }
+    await goToLine(window.current_line);
+    setInterval(maybePushUpdate, 60000);
+    makePopup();
+    makeAddButton();
+    }
+    $(document).ready(function() {
+    main();
+    });
+    </script>
+    <div id="book"></div>
+    
+    <div id="popup-full">
+        <div id="popup-spacer"></div>
+        <div id="popup">
+            <div id="bookselect"></div><br>
+            <a id="manage" href="manage.html"><button>Manage Books</button></a>
+            <a id="wordlist" href="wordlist.html"><button>Vocab List</button></a>
+        </div>
+    </div>
+    <style id="where-popup">
+        #popup-full {
+           bottom: 0px;
+       }
+   </style>
+    <svg id="addButton" viewBox="0 0 500 500">
+        <ellipse style="fill: rgb(216, 216, 216); fill-opacity: 0; stroke-opacity: 1.0; stroke-width: 28px; stroke: rgb(126, 126, 126);" cx="246.5" cy="240.5" rx="190" ry="190" transform="matrix(0.9999999999999999, 0, 0, 0.9999999999999999, 0, -3.552713678800501e-15)"></ellipse>
+        <g transform="matrix(0.8087950348854065, 0, 0, 0.8087950348854065, 55.045040130615234, 41.49545288085937)">
+          <rect x="213.537" y="91.561" width="46.435" height="309.102" style="stroke: rgb(0, 0, 0); paint-order: fill; fill: rgb(143, 143, 143); fill-opacity: 1.0; stroke-opacity: 0;"></rect>
+          <rect x="265.115" y="71.806" width="46.435" height="309.102" style="stroke: rgb(0, 0, 0); paint-order: fill; fill: rgb(143, 143, 143); fill-opacity: 1.0; transform-box: fill-box; transform-origin: 50% 50%; stroke-opacity: 0;" transform="matrix(0, 1, -1, 0, -51.610046, 11.24148)"></rect>
+        </g>
+      </svg>
+</body>
+</html>

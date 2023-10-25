@@ -1,0 +1,15 @@
+Books page:
+1. Grab entire metadata, check schema-version = 0. If not exist, create.
+2. Check my localStorage last-updated vs metadata last-updated. If not equal, get book list from content and write last-updated and book list to localStorage (preserving any content entries in book list that were previously there).
+3. Get current-book, current-line specified by metadata, and load it if it exists, otherwise "No book loaded. Choose a book from dropdown." If book exists but line doesn't, set line to 0 and push.
+4. Every minute, check if current-line is different from metadata. If so, set metadata.current-line to current-line, and push metadata.
+Book dropdown:
+1. Have little arrow at bottom of screen. When bottom of screen is moused over, pop-up half-screen-length book list (scrollable). Pops back down when mouse goes to top half of screen.
+2. Upon selecting book from book list, save current-line to metadata if it differs. Then, save new current-book to metadata. If new current-book has current-line, load line, else write 0 to current-line for the book.
+3. When click on manage books, manage page.
+
+Manage page:
+1. Display all book titles, with delete buttons, and add book button.
+2. Delete button: When clicked, send delete request via book id stored. Doesn't have to succeed. Push last-updated and update local books.
+3. Add button: When clicked, pop-up prompt w/ title and upload button. On clicking submit, send insert request, and get returned book id and update local books.
+4. Back button takes you to books page.

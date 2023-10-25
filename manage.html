@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html><head>
+    <script src="jquery-3.5.1.js"></script>
+    <script src="https://unpkg.com/realm-web@1.2.0/dist/bundle.iife.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <style>
+
+    </style>
+    <script src="loadbooks.js"></script>
+</head>
+<body>
+
+    <script>
+    /*
+Manage page:
+1. Display all book titles, with delete buttons, and add book button.
+2. Delete button: When clicked, send delete request via book id stored. Doesn't have to succeed. Push last-updated and update local books.
+3. Add button: When clicked, pop-up prompt w/ title and upload button. On clicking submit, send insert request, and get returned book id and update local books.
+4. Back button takes you to books page.*/
+function writeBooksToSelector() {
+        $("#bookselect").empty();
+        for(const [id, book] of Object.entries(window.localBookInfo)) {
+            $("#bookselect").append(`<div><button onClick='delete_book("${id}", writeBooksToSelector)'>X</button>  ${book.title}</div>`); 
+        }
+    }
+    main = async () => {
+    await get_colls();
+    await fetch_metadata();
+    if(window.metadata.schemaVersion !== 0) {
+        console.error("Schema version wrong, panic!");
+        return;
+    }
+    const localTS = localStorage.getItem("bookListLastUpdated");
+    window.localBookInfo = JSON.parse(localStorage.getItem("bookList"));
+    if(window.localBookInfo === null) {
+        window.localBookInfo = {};
+    }
+    if(localTS !== window.metadata.last_updated) {
+        console.log("Timestamp mismatch, fetching book list");
+        const newBookInfo = await get_books();
+        for (const [key, value] of Object.entries(newBookInfo)) {
+            if(!(key in window.localBookInfo)) {
+                window.localBookInfo[key] = value;
+            }
+        }
+        localStorage.setItem("bookList", JSON.stringify(window.localBookInfo));
+        localStorage.setItem("bookListLastUpdated", window.metadata.last_updated);
+        console.log("Fetched");
+    }
+    writeBooksToSelector();
+
+    document.getElementById('input-file').addEventListener('change', getFile);
+
+    function getFile(event) {
+        const input = event.target
+    if ('files' in input && input.files.length > 0) {
+        readFileContent(input.files[0]).then(content => {
+            window.currentFileContent = content});
+    } else if ('files' in input && input.files.length == 0) {
+        window.currentFileContent = undefined;
+    }
+    }
+
+    function readFileContent(file) {
+        const reader = new FileReader()
+        return new Promise((resolve, reject) => {
+            reader.onload = event => resolve(event.target.result)
+            reader.onerror = error => reject(error)
+            reader.readAsText(file)
+        })
+    }
+    uploadSelectedFile = async () => {
+        const title = document.querySelector('#title').value;
+        if(window.currentFileContent === undefined || title === "") {
+            alert("Please select a file to upload.");
+        }
+        await add_book(title, window.currentFileContent).then(writeBooksToSelector);
+    }
+    }
+    $(document).ready(function() {
+    main();
+    });
+    </script>
+    <div id="bookselect"></div><br><br>
+    <div id="upload">
+        Title: <input type="text" id="title"></input>
+        <label for="input-file">Specify a book file:</label><br>
+        <input type="file" id="input-file">
+        <button id="inserter" onclick="uploadSelectedFile()">Add new book</button>
+    </div>
+    <a href="index.html"><button>Back</button></a>
+
+    <div id="book"></div>
+    
+    <div id="popup-full">
+        <div id="popup-spacer"></div>
+        <div id="popup">
+            
+            
+        </div>
+    </div>
+    <style id="where-popup">
+        #popup-full {
+           bottom: 0px;
+       }
+   </style>
+    
+</body>
+</html>
